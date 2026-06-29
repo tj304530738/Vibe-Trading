@@ -1,0 +1,6 @@
+name = "warroom-proxy"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+# No env vars needed — all config is in the worker code

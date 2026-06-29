@@ -25,6 +25,21 @@ const Correlation = lazy(() =>
 const AlphaZoo = lazy(() =>
   import("@/pages/AlphaZoo").then((m) => ({ default: m.AlphaZoo })),
 );
+const Overview = lazy(() =>
+  import("@/pages/Overview").then((m) => ({ default: m.Overview })),
+);
+const HumanoidRobot = lazy(() =>
+  import("@/pages/HumanoidRobot").then((m) => ({ default: m.HumanoidRobot })),
+);
+const AIPower = lazy(() =>
+  import("@/pages/AIPower").then((m) => ({ default: m.AIPower })),
+);
+const SolidBattery = lazy(() =>
+  import("@/pages/SolidBattery").then((m) => ({ default: m.SolidBattery })),
+);
+const WarRoom = lazy(() =>
+  import("@/pages/WarRoom").then((m) => ({ default: m.WarRoom })),
+);
 
 function PageLoader() {
   return (
@@ -46,6 +61,11 @@ export const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
+      { path: "/overview", element: wrap(Overview) },
+      { path: "/humanoid-robot", element: wrap(HumanoidRobot) },
+      { path: "/ai-power", element: wrap(AIPower) },
+      { path: "/solid-battery", element: wrap(SolidBattery) },
+      { path: "/war-room", element: wrap(WarRoom) },
       { path: "/", element: wrap(Home) },
       { path: "/agent", element: wrap(Agent) },
       { path: "/runtime", element: wrap(Runtime) },

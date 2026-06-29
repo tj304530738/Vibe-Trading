@@ -36,6 +36,34 @@ export default defineConfig(({ mode }) => {
       port: 5899,
       proxy: {
         ...Object.fromEntries(PROXY_PATHS.map((p) => [p, apiProxy])),
+        // Proxy Tencent/Sina finance APIs to avoid CORS issues
+        "/api/tencent": {
+          target: "https://qt.gtimg.cn",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/tencent/, ""),
+        },
+        "/api/sina": {
+          target: "https://hq.sinajs.cn",
+          changeOrigin: true,
+          headers: { Referer: "https://finance.sina.com.cn" },
+          rewrite: (path) => path.replace(/^\/api\/sina/, ""),
+        },
+        // Eastmoney proxy for WarRoom hot sectors / dragon tiger / reports
+        "/api/eastmoney/sectors": {
+          target: "https://push2.eastmoney.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/eastmoney\/sectors/, "/api/qt/clist/get"),
+        },
+        "/api/eastmoney/dragon": {
+          target: "https://datacenter.eastmoney.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/eastmoney\/dragon/, "/securities/api/data/v1/get"),
+        },
+        "/api/eastmoney/reports": {
+          target: "https://reportapi.eastmoney.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/eastmoney\/reports/, "/report/list"),
+        },
         // SPA RunDetail page — only the two-segment ``/runs/{id}``
         // form should fall back to ``index.html`` on browser navigation.
         // ``/runs/{id}/code`` and ``/runs/{id}/pine`` are API-only and
