@@ -1,15 +1,17 @@
 // Netlify Function: API 代理
 // 路径: /.netlify/functions/api
 // 支持的子路径:
-//   /tencent?q=...     → 腾讯财经 A股指数
-//   /sina/list=...     → 新浪财经 美股指数/个股
-//   /sectors?...       → 东方财富 板块排行
-//   /dragon?...        → 东方财富 龙虎榜
-//   /reports?...       → 东方财富 研报
+//   /api/tencent?q=...     -> 腾讯财经 A股指数
+//   /api/sina/list=...     -> 新浪财经 美股指数/个股
+//   /api/sectors?...       -> 东方财富 板块排行
+//   /api/dragon?...        -> 东方财富 龙虎榜
+//   /api/reports?...       -> 东方财富 研报
 
 export default async (req, context) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace('/.netlify/functions/api', '');
+  // Netlify rewrite 后 pathname 可能是 /api/xxx 或 /.netlify/functions/api/xxx
+  const rawPath = url.pathname;
+  const path = rawPath.replace('/.netlify/functions/api', '').replace('/api', '') || '/';
 
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -41,16 +43,18 @@ export default async (req, context) => {
     } else {
       return json({
         error: 'Not found',
-        hint: 'Use /tencent, /sina, /sectors, /dragon, or /reports',
+        hint: 'Use /api/tencent, /api/sina, /api/sectors, /api/dragon, or /api/reports',
         path,
+        rawPath,
       }, 404);
     }
 
     const resp = await fetch(targetUrl, {
       method: req.method,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         ...extraHeaders,
       },
     });
