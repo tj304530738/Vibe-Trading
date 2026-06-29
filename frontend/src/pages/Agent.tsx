@@ -119,11 +119,7 @@ function LiveActionChip({ action }: { action: LiveAction }) {
       <div className="flex-1 min-w-0">
         <div className={["inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs", tone].join(" ")}>
           <Icon className="h-3 w-3 shrink-0" />
-<<<<<<< HEAD
-          <span className="shrink-0 font-medium uppercase tracking-wide text-[10px]">运行时</span>
-=======
           <span className="shrink-0 font-medium uppercase tracking-wide text-[10px]">{t("agent.runtimeBadge")}</span>
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
           <span className="shrink-0 font-medium">{liveActionLabel(action)}</span>
           {action.intent_normalized && (
             <span className="truncate text-foreground/80">· {action.intent_normalized}</span>
@@ -159,7 +155,7 @@ function getGoalProgress(snapshot: GoalSnapshot | null): {
     met,
     total,
     label: total > 0 ? `${met}/${total}` : "",
-    metLabel: total > 0 ? `${met}/${total} 已达成` : "",
+    metLabel: total > 0 ? `${met}/${total} met` : "",
     evidenceTotal,
   };
 }
@@ -364,7 +360,7 @@ export function Agent() {
           agentMsgs.push({ id: m.message_id, type: "user", content: m.content, timestamp: ts });
         } else if (runId) {
           // Show text answer first (if non-empty), then chart card
-          if (m.content && m.content !== "策略执行完成。") {
+          if (m.content && m.content !== "Strategy execution completed.") {
             agentMsgs.push({ id: m.message_id + "_ans", type: "answer", content: m.content, timestamp: ts });
           }
           if (metrics && Object.keys(metrics).length > 0) {
@@ -626,7 +622,7 @@ export function Agent() {
         touch();
         setReasoningActive(false);
         act().clearStreaming();
-        act().addMessage({ id: "", type: "error", content: String(d.error || "执行失败"), timestamp: Date.now() });
+        act().addMessage({ id: "", type: "error", content: String(d.error || "Execution failed"), timestamp: Date.now() });
         act().setStatus("idle");
         // Clear stale toolCalls so the next turn's running indicator doesn't
         // briefly show the previous turn's progress before fresh events land.
@@ -984,7 +980,7 @@ export function Agent() {
         goal_id: goalSnapshot.goal.goal_id,
         expected_goal_id: goalSnapshot.goal.goal_id,
         status: "cancelled",
-        recap: "已从网页界面取消。",
+        recap: "Cancelled from Web UI.",
       });
       setGoalSnapshot(null);
       setGoalDetailsOpen(false);
@@ -1055,21 +1051,21 @@ export function Agent() {
 
   const handleExport = () => {
     if (messages.length === 0) return;
-    const lines: string[] = [`# 对话导出`, ``, `导出时间: ${new Date().toLocaleString()}`, ``];
+    const lines: string[] = [`# Chat Export`, ``, `Export time: ${new Date().toLocaleString()}`, ``];
     for (const msg of messages) {
       const time = new Date(msg.timestamp).toLocaleString();
       if (msg.type === "user") {
-        lines.push(`## 用户 (${time})`, ``, msg.content, ``);
+        lines.push(`## User (${time})`, ``, msg.content, ``);
       } else if (msg.type === "answer") {
-        lines.push(`## 助手 (${time})`, ``, msg.content, ``);
+        lines.push(`## Assistant (${time})`, ``, msg.content, ``);
       } else if (msg.type === "error") {
-        lines.push(`## 错误 (${time})`, ``, msg.content, ``);
+        lines.push(`## Error (${time})`, ``, msg.content, ``);
       } else if (msg.type === "tool_call") {
-        lines.push(`> 工具调用: ${msg.tool || "unknown"}`, ``);
+        lines.push(`> Tool call: ${msg.tool || "unknown"}`, ``);
       } else if (msg.type === "swarm_status") {
-        lines.push(`> 群组状态: ${msg.swarmStatus?.preset || "swarm"} ${msg.swarmStatus?.status || ""}`, ``);
+        lines.push(`> Swarm status: ${msg.swarmStatus?.preset || "swarm"} ${msg.swarmStatus?.status || ""}`, ``);
       } else if (msg.type === "run_complete") {
-        lines.push(`> 回测完成: ${msg.runId || ""}`, ``);
+        lines.push(`> Backtest complete: ${msg.runId || ""}`, ``);
       }
     }
     const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
@@ -1299,11 +1295,7 @@ export function Agent() {
             <div className="flex items-center gap-1">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">
                 <Target className="h-3 w-3" />
-<<<<<<< HEAD
-                新建研究目标
-=======
                 {t("agent.newResearchGoal")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                 <button type="button" onClick={() => setGoalComposerActive(false)} className="hover:text-destructive transition-colors">
                   <X className="h-3 w-3" />
                 </button>
@@ -1317,11 +1309,7 @@ export function Agent() {
                 onClick={() => setGoalDetailsOpen((open) => !open)}
                 className="inline-flex max-w-full items-center gap-1.5 justify-self-start rounded-lg bg-primary/10 px-2.5 py-1 text-left text-xs font-medium text-primary transition-colors hover:bg-primary/15"
                 title={goalSnapshot.goal.objective}
-<<<<<<< HEAD
-                aria-label="活跃的研究目标"
-=======
                 aria-label={t("agent.activeResearchGoal")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                 aria-expanded={goalDetailsOpen}
               >
                 <Target className="h-3 w-3 shrink-0" />
@@ -1335,13 +1323,8 @@ export function Agent() {
                   </span>
                 )}
                 {goalProgress.evidenceTotal > 0 && (
-<<<<<<< HEAD
-                  <span className="shrink-0 rounded bg-background px-1 font-mono text-[10px] text-primary" title="为此研究目标收集的证据">
-                    {goalProgress.evidenceTotal} 证据
-=======
                   <span className="shrink-0 rounded bg-background px-1 font-mono text-[10px] text-primary" title={t("agent.evidenceCollectedTitle")}>
                     {t("agent.evidenceCount", { count: goalProgress.evidenceTotal })}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </span>
                 )}
                 <ChevronDown
@@ -1369,11 +1352,7 @@ export function Agent() {
                           className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                         >
                           <X className="h-3 w-3" />
-<<<<<<< HEAD
-                          取消
-=======
                           {t("agent.cancel")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                         </button>
                         <button
                           type="button"
@@ -1382,11 +1361,7 @@ export function Agent() {
                           className="inline-flex items-center gap-1 rounded-lg bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
                         >
                           <Check className="h-3 w-3" />
-<<<<<<< HEAD
-                          保存
-=======
                           {t("agent.save")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                         </button>
                       </div>
                     </div>
@@ -1398,11 +1373,7 @@ export function Agent() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-lg border bg-muted/20 p-2.5">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-<<<<<<< HEAD
-                        达成标准
-=======
                         {t("agent.criteria")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                       </div>
                       <div className="mt-1 font-mono text-base font-semibold text-foreground">
                         {goalProgress.label || "0/0"}
@@ -1410,11 +1381,7 @@ export function Agent() {
                     </div>
                     <div className="rounded-lg border bg-muted/20 p-2.5">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-<<<<<<< HEAD
-                        证据
-=======
                         {t("agent.evidence")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                       </div>
                       <div className="mt-1 font-mono text-base font-semibold text-foreground">
                         {goalProgress.evidenceTotal}
@@ -1442,7 +1409,7 @@ export function Agent() {
                             </span>
                           </span>
                           <span className="rounded-full border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                            {evidenceCount} 条
+                            {evidenceCount} ev
                           </span>
                         </div>
                       );
@@ -1451,11 +1418,7 @@ export function Agent() {
                   {goalSnapshot.evidence.length > 0 && (
                     <div className="grid gap-1.5 border-t pt-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-<<<<<<< HEAD
-                        近期证据
-=======
                         {t("agent.recentEvidence")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                       </div>
                       {latestGoalEvidence(goalSnapshot).map((item) => (
                         <div key={item.evidence_id} className="rounded-lg bg-muted/20 px-2 py-1.5">
@@ -1478,11 +1441,7 @@ export function Agent() {
                       className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
                     >
                       <Play className="h-3 w-3" />
-<<<<<<< HEAD
-                      继续
-=======
                       {t("agent.continue")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                     </button>
                     <button
                       type="button"
@@ -1491,11 +1450,7 @@ export function Agent() {
                       className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
                     >
                       <Pencil className="h-3 w-3" />
-<<<<<<< HEAD
-                      编辑
-=======
                       {t("agent.edit")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                     </button>
                     <button
                       type="button"
@@ -1503,11 +1458,7 @@ export function Agent() {
                       className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
                     >
                       <X className="h-3 w-3" />
-<<<<<<< HEAD
-                      取消目标
-=======
                       {t("agent.cancelGoal")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                     </button>
                   </div>
                 </div>
@@ -1538,11 +1489,7 @@ export function Agent() {
           {uploading && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-<<<<<<< HEAD
-              上传中…
-=======
               {t("agent.uploading")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
             </div>
           )}
           {/* Persistent kill switch — distinct from the per-turn Stop button
@@ -1552,11 +1499,7 @@ export function Agent() {
               {liveIsHalted ? (
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
                   <OctagonX className="h-3 w-3" />
-<<<<<<< HEAD
-                  连接器运行时已停止
-=======
                   {t("agent.connectorHalted")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                 </span>
               ) : (
                 <button
@@ -1564,17 +1507,10 @@ export function Agent() {
                   onClick={handleHaltLive}
                   disabled={halting}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-2.5 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-40"
-<<<<<<< HEAD
-                  title="立即停止连接器运行时活动"
-                >
-                  {halting ? <Loader2 className="h-3 w-3 animate-spin" /> : <OctagonX className="h-3 w-3" />}
-                  停止连接器运行时
-=======
                   title={t("agent.haltConnectorTitle")}
                 >
                   {halting ? <Loader2 className="h-3 w-3 animate-spin" /> : <OctagonX className="h-3 w-3" />}
                   {t("agent.haltConnector")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                 </button>
               )}
             </div>
@@ -1587,11 +1523,7 @@ export function Agent() {
                 onClick={() => setShowUploadMenu(prev => !prev)}
                 disabled={status === "streaming" || uploading}
                 className="w-9 h-9 rounded-full border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 shrink-0"
-<<<<<<< HEAD
-                title="更多选项"
-=======
                 title={t("agent.moreOptions")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -1603,11 +1535,7 @@ export function Agent() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                   >
                     <Paperclip className="h-4 w-4" />
-<<<<<<< HEAD
-                    上传 PDF 文档
-=======
                     {t("agent.uploadPdf")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </button>
                   <div className="border-t my-1" />
                   <button
@@ -1621,28 +1549,20 @@ export function Agent() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                   >
                     <Target className="h-4 w-4" />
-<<<<<<< HEAD
-                    研究目标
-=======
                     {t("agent.researchGoal")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </button>
                   <button
                     type="button"
                     onClick={() => {
                       setShowUploadMenu(false);
                       setGoalComposerActive(false);
-                      setSwarmPreset({ name: "auto", title: "智能体群组" });
+                      setSwarmPreset({ name: "auto", title: "Agent Swarm" });
                       inputRef.current?.focus();
                     }}
                     className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                   >
                     <Users className="h-4 w-4" />
-<<<<<<< HEAD
-                    智能体群组
-=======
                     {t("agent.agentSwarm")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </button>
                   <div className="border-t my-1" />
                   <button
@@ -1654,11 +1574,7 @@ export function Agent() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                   >
                     <Landmark className="h-4 w-4" />
-<<<<<<< HEAD
-                    检查交易连接器
-=======
                     {t("agent.checkConnector")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </button>
                   <button
                     type="button"
@@ -1669,11 +1585,7 @@ export function Agent() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                   >
                     <Landmark className="h-4 w-4" />
-<<<<<<< HEAD
-                    分析连接器组合
-=======
                     {t("agent.analyzePortfolio")}
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
                   </button>
                 </div>
               )}
@@ -1719,13 +1631,8 @@ export function Agent() {
               }}
               placeholder={
                 goalComposerActive
-<<<<<<< HEAD
-                  ? "描述要附加到此会话的研究目标"
-                  : "例如：为 000001.SZ 创建双均线交叉策略，回测 2024 年"
-=======
                   ? t("agent.describeGoal")
                   : t("agent.placeholder")
->>>>>>> 0c297be610ab61eef59fe01db8ba67c97b91f2ef
               }
               className="flex-1 px-4 py-2.5 rounded-xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition-shadow resize-none max-h-32 overflow-y-auto"
               disabled={status === "streaming"}
