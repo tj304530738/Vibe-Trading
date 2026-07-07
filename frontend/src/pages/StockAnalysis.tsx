@@ -54,7 +54,9 @@ interface Position {
 interface MarketMonitor {
   upLimitCount: number;
   downLimitCount: number;
-  sentiment: 'bullish' | 'neutral' | 'bearish';
+  sentiment: 'bullish' | 'neutral' | 'bearish' | 'crazy' | 'panic';
+  sentimentText: string;
+  advice: string;
   sectorRank: SectorItem[];
   riskAnnouncements: Array<{ title: string; time: string; stock: string }>;
   lastUpdate: string;
@@ -184,10 +186,34 @@ async function fetchMarketMonitor(): Promise<MarketMonitor> {
   try {
     const upLimitCount = Math.floor(Math.random() * 30) + 50;
     const downLimitCount = Math.floor(Math.random() * 20) + 10;
-    const ratio = upLimitCount / (upLimitCount + downLimitCount);
-    let sentiment: 'bullish' | 'neutral' | 'bearish' = 'neutral';
-    if (ratio > 0.7) sentiment = 'bullish';
-    else if (ratio < 0.5) sentiment = 'bearish';
+    let sentiment: 'bullish' | 'neutral' | 'bearish' | 'crazy' | 'panic' = 'neutral';
+    let sentimentText = '震荡';
+    let advice = '正常操作';
+    if (upLimitCount > 80 && downLimitCount < 5) {
+      sentiment = 'crazy';
+      sentimentText = '狂热';
+      advice = '减仓信号';
+    } else if (upLimitCount >= 50 && upLimitCount <= 80 && downLimitCount >= 5 && downLimitCount <= 15) {
+      sentiment = 'bullish';
+      sentimentText = '活跃';
+      advice = '正常操作';
+    } else if (upLimitCount >= 20 && upLimitCount <= 50 && downLimitCount >= 15 && downLimitCount <= 30) {
+      sentiment = 'neutral';
+      sentimentText = '分化';
+      advice = '只做最强';
+    } else if (upLimitCount < 20 && downLimitCount > 30) {
+      sentiment = 'panic';
+      sentimentText = '恐慌';
+      advice = '空仓观望';
+    } else if (upLimitCount > downLimitCount * 2) {
+      sentiment = 'bullish';
+      sentimentText = '活跃';
+      advice = '正常操作';
+    } else if (downLimitCount > upLimitCount * 2) {
+      sentiment = 'bearish';
+      sentimentText = '低迷';
+      advice = '谨慎操作';
+    }
 
     const riskAnnouncements = [
       { title: 'XX科技发布业绩预告，净利润同比下降40%', time: '09:35', stock: 'XX科技' },
@@ -201,6 +227,8 @@ async function fetchMarketMonitor(): Promise<MarketMonitor> {
       upLimitCount,
       downLimitCount,
       sentiment,
+      sentimentText,
+      advice,
       sectorRank: sectors.slice(0, 5),
       riskAnnouncements,
       lastUpdate: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
@@ -210,6 +238,8 @@ async function fetchMarketMonitor(): Promise<MarketMonitor> {
       upLimitCount: 68,
       downLimitCount: 15,
       sentiment: 'bullish',
+      sentimentText: '活跃',
+      advice: '正常操作',
       sectorRank: MOCK_SECTORS.slice(0, 5),
       riskAnnouncements: [],
       lastUpdate: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
@@ -448,6 +478,125 @@ export function StockAnalysis() {
             )}
           </div>
 
+          <div className="rounded-lg border bg-card/50 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-blue-500" />
+                📊 盘后深度复盘（15:00-16:30）
+              </h3>
+              <span className="text-[10px] text-muted-foreground">
+                <Clock className="h-2 w-2 inline mr-1" />
+                盘后时段
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Flame className="h-3 w-3 text-rose-500" />
+                  <span className="text-xs font-semibold">板块拆解（基于龙虎榜）</span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Step 1</span>
+                    <span>龙虎榜原始数据</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-[10px]">
+                    <div className="p-1 rounded bg-rose-500/10">
+                      <span className="text-rose-600">机构净买入超3000万</span>
+                      <p className="text-muted-foreground mt-0.5">中际旭创 +4.91亿</p>
+                    </div>
+                    <div className="p-1 rounded bg-blue-500/10">
+                      <span className="text-blue-600">游资席位动向</span>
+                      <p className="text-muted-foreground mt-0.5">炒股养家买入</p>
+                    </div>
+                    <div className="p-1 rounded bg-amber-500/10">
+                      <span className="text-amber-600">机构大额净卖出</span>
+                      <p className="text-muted-foreground mt-0.5">紫光股份 -2.22亿</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 2</span>
+                    <span>AI关键词提取</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-[10px]">
+                    <div className="p-1 rounded bg-emerald-500/10">
+                      <span className="text-emerald-600">行业词</span>
+                      <p className="text-muted-foreground mt-0.5">显示器、锂电池</p>
+                    </div>
+                    <div className="p-1 rounded bg-purple-500/10">
+                      <span className="text-purple-600">概念词</span>
+                      <p className="text-muted-foreground mt-0.5">固态电池、国产算力</p>
+                    </div>
+                    <div className="p-1 rounded bg-orange-500/10">
+                      <span className="text-orange-600">产品词</span>
+                      <p className="text-muted-foreground mt-0.5">覆铜板、散热模组</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 3</span>
+                    <span>聚类分组 → 显示面板链、机器人链、锂电池链</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 4</span>
+                    <span>频次与密度 → 显示面板3只、机器人3只、机构覆盖度高</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 5</span>
+                    <span>资金流向聚合 → 板块级净流入 + 游资-机构共振判定</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 6</span>
+                    <span>多源交叉验证 → 板块涨幅、成交量、券商研报</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-2">
+                    <span className="text-muted-foreground">Step 7</span>
+                    <span>优先级排序 → 强/中/弱三级信号</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t">
+                  <span className="text-xs font-medium text-blue-600 mb-2 block">📌 判断法则</span>
+                  <div className="space-y-1 text-[10px]">
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500">法则一</span>
+                      <span className="text-muted-foreground">逆势买入 &gt; 顺追买入 — 机构在跌停日逆势净买入（如惠科跌9.5%仍净买4.91亿），比涨停日跟风买信号强得多</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500">法则二</span>
+                      <span className="text-muted-foreground">3日连续买入 &gt; 单日脉冲 — 蔚蓝锂芯3天累计净买7.56亿，远强于单日买入3000万</span>
+                    </div>
+                    <div className="flex items-start gap-1">
+                      <span className="text-rose-500">法则三</span>
+                      <span className="text-muted-foreground">游资机构共振 &gt; 单边押注 — 炒股养家买入+机构净买的鑫磊股份，比游资单独追涨靠谱得多</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3 bg-muted/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="h-3 w-3 text-amber-500" />
+                    <span className="text-xs font-semibold">持仓诊断</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground text-center py-4">
+                    功能开发中...
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 bg-muted/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="h-3 w-3 text-green-500" />
+                    <span className="text-xs font-semibold">缠论技术面</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground text-center py-4">
+                    功能开发中...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {selectedSector && (
             <div className="rounded-lg border bg-card/50 p-4">
               <div className="flex items-center justify-between mb-3">
@@ -592,16 +741,23 @@ export function StockAnalysis() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">市场情绪</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                    marketMonitor.sentiment === 'bullish' ? 'bg-rose-500/10 text-rose-600' :
-                    marketMonitor.sentiment === 'bearish' ? 'bg-emerald-500/10 text-emerald-600' :
-                    'bg-amber-500/10 text-amber-600'
-                  }`}>
-                    {marketMonitor.sentiment === 'bullish' ? '牛市' :
-                     marketMonitor.sentiment === 'bearish' ? '熊市' : '震荡'}
-                  </span>
+                <div className="p-2 rounded bg-muted/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-muted-foreground">市场情绪</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                      marketMonitor.sentiment === 'crazy' ? 'bg-red-500/10 text-red-600' :
+                      marketMonitor.sentiment === 'bullish' ? 'bg-rose-500/10 text-rose-600' :
+                      marketMonitor.sentiment === 'neutral' ? 'bg-amber-500/10 text-amber-600' :
+                      marketMonitor.sentiment === 'bearish' ? 'bg-blue-500/10 text-blue-600' :
+                      'bg-emerald-500/10 text-emerald-600'
+                    }`}>
+                      {marketMonitor.sentimentText}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">操作建议</span>
+                    <span className="text-[10px] font-medium text-blue-600">{marketMonitor.advice}</span>
+                  </div>
                 </div>
 
                 {positions.length > 0 && (
