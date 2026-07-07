@@ -218,7 +218,7 @@ async function fetchMarketMonitor(): Promise<MarketMonitor> {
 }
 
 export function StockAnalysis() {
-  const [sectors, setSectors] = useState<SectorItem[]>([]);
+  const [, setSectors] = useState<SectorItem[]>([]);
   const [hotSectors, setHotSectors] = useState<HotSector[]>([]);
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [stocks, setStocks] = useState<StockItem[]>([]);
@@ -604,11 +604,62 @@ export function StockAnalysis() {
                   </span>
                 </div>
 
+                {positions.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <Activity className="h-3 w-3 text-blue-500" />
+                      <span className="text-xs text-muted-foreground">持仓股监控</span>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {positions.map((pos) => {
+                        const sectorMatch = marketMonitor.sectorRank.find(s => pos.name.includes(s.name.slice(0, 2)) || s.name.includes(pos.name.slice(0, 2)));
+                        const hasRisk = marketMonitor.riskAnnouncements.some(a => a.stock.includes(pos.name.slice(0, 2)) || pos.name.includes(a.stock.slice(0, 2)));
+                        const riskItem = marketMonitor.riskAnnouncements.find(a => a.stock.includes(pos.name.slice(0, 2)) || pos.name.includes(a.stock.slice(0, 2)));
+                        return (
+                          <div key={pos.id} className="p-2 rounded border">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[11px] font-medium">{pos.name}</span>
+                              <span className={`text-[11px] font-medium ${getPnlColor(pos.changePct)}`}>
+                                {pos.changePct > 0 ? '+' : ''}{pos.changePct.toFixed(2)}%
+                              </span>
+                            </div>
+                            {sectorMatch && (
+                              <div className="flex items-center gap-1 text-[10px] text-emerald-600">
+                                <TrendingUp className="h-2 w-2" />
+                                <span>板块热度: 前{marketMonitor.sectorRank.indexOf(sectorMatch) + 1}</span>
+                              </div>
+                            )}
+                            {hasRisk && riskItem && (
+                              <div className="mt-1 p-1 rounded bg-amber-500/10 text-[10px] text-amber-600">
+                                ⚠️ {riskItem.title.slice(0, 20)}...
+                              </div>
+                            )}
+                            {pos.changePct <= -3 && (
+                              <button
+                                onClick={() => checkNegativeNews(pos.name)}
+                                className="mt-1 flex items-center gap-1 w-full py-1 rounded bg-rose-500/10 text-rose-600 text-[10px] hover:bg-rose-500/20"
+                              >
+                                <Search className="h-2 w-2" />
+                                跌幅超3%，搜索利空
+                              </button>
+                            )}
+                            {negativeNews[pos.name] && (
+                              <div className="mt-1 p-1 rounded bg-rose-500/10 text-rose-600 text-[10px]">
+                                {negativeNews[pos.name]}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {marketMonitor.riskAnnouncements.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 mb-2">
                       <AlertTriangle className="h-3 w-3 text-amber-500" />
-                      <span className="text-xs text-muted-foreground">风险公告</span>
+                      <span className="text-xs text-muted-foreground">市场风险公告</span>
                     </div>
                     <div className="space-y-1 max-h-24 overflow-y-auto">
                       {marketMonitor.riskAnnouncements.map((ann, i) => (
@@ -625,10 +676,14 @@ export function StockAnalysis() {
                 )}
 
                 <div>
-                  <span className="text-xs text-muted-foreground mb-2 block">板块涨幅 TOP5</span>
+                  <span className="text-xs text-muted-foreground mb-2 block">热门板块 TOP5</span>
                   <div className="space-y-1">
                     {marketMonitor.sectorRank.map((sector, i) => (
-                      <div key={i} className="flex items-center justify-between">
+                      <div
+                        key={i}
+                        onClick={() => handleSectorClick(sector.name)}
+                        className="flex items-center justify-between p-1 rounded hover:bg-muted/30 cursor-pointer"
+                      >
                         <span className="text-[10px] truncate">{sector.name}</span>
                         <span className={`text-[10px] font-medium ${sector.changePct >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                           {sector.changePct >= 0 ? '+' : ''}{sector.changePct.toFixed(2)}%
@@ -641,39 +696,7 @@ export function StockAnalysis() {
             ) : null}
           </div>
 
-          <div className="rounded-lg border bg-card/50 p-4">
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-              <TrendingUp className="h-4 w-4 text-blue-500" />
-              涨幅榜 TOP10
-            </h3>
-            {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-8 rounded bg-muted/30 animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {sectors.slice(0, 10).map((sector, i) => (
-                  <div
-                    key={i}
-                    onClick={() => handleSectorClick(sector.name)}
-                    className="flex items-center justify-between p-2 rounded hover:bg-muted/30 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-5 text-center text-xs font-medium ${i < 3 ? 'text-amber-500' : 'text-muted-foreground'}`}>
-                        {i + 1}
-                      </span>
-                      <span className="text-xs truncate">{sector.name}</span>
-                    </div>
-                    <span className={`text-xs font-medium ${sector.changePct >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                      {sector.changePct >= 0 ? '+' : ''}{sector.changePct.toFixed(2)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+
         </div>
       </div>
 
