@@ -356,7 +356,7 @@ function generateMockLHBData(): LHBSeatItem[] {
 
 function analyzeLHB(stocks: LHBStockAgg[]): { sectors: SectorAnalysis[]; disagreements: DisagreementStock[] } {
   const stockToSector = (stock: LHBStockAgg): string => {
-    const text = (stock.explanation + stock.name + stock.code).toLowerCase();
+    const text = (stock.explanation + ' ' + stock.name).toLowerCase();
     let bestSector = '其他';
     let bestScore = 0;
 
@@ -364,9 +364,12 @@ function analyzeLHB(stocks: LHBStockAgg[]): { sectors: SectorAnalysis[]; disagre
       if (sector === '其他') continue;
       let score = 0;
       for (const kw of keywords) {
-        if (text.includes(kw.toLowerCase())) {
+        const kwLower = kw.toLowerCase();
+        if (text.includes(kwLower)) {
           // 关键词长度越长权重越高（更精确的词）
-          score += kw.length;
+          // 对短关键词(<3字符)额外加权重，因为容易误判需要更明确匹配
+          const lengthWeight = kw.length >= 4 ? kw.length * 1.5 : kw.length * 2.5;
+          score += lengthWeight;
         }
       }
       if (score > bestScore) {
@@ -374,6 +377,12 @@ function analyzeLHB(stocks: LHBStockAgg[]): { sectors: SectorAnalysis[]; disagre
         bestSector = sector;
       }
     }
+
+    // 如果没有匹配到任何板块（分数为0），归类为"其他"
+    if (bestScore === 0) {
+      return '其他';
+    }
+
     return bestSector;
   };
 
