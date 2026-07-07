@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, BarChart3, Bot, FileText, Languages, Moon, Sun, Plus, Trash2, Pencil, MessageSquare, ChevronsLeft, ChevronsRight, Settings, Layers, Loader2, LayoutDashboard, Cpu, Server, BatteryMedium, Target } from "lucide-react";
+import { Activity, BarChart3, Bot, FileText, Languages, Moon, Sun, Plus, Trash2, Pencil, MessageSquare, ChevronsLeft, ChevronsRight, Settings, Layers, Loader2, LayoutDashboard, Cpu, Server, BatteryMedium, Target, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { api, type SessionItem } from "@/lib/api";
@@ -16,6 +16,7 @@ export function Layout() {
 
   const NAV = [
     { to: "/war-room", icon: Target, label: "每日作战室" },
+    { to: "/stock-analysis", icon: TrendingUp, label: "个股分析" },
     { to: "/overview", icon: LayoutDashboard, label: "总览" },
     { to: "/humanoid-robot", icon: Cpu, label: "人形机器人" },
     { to: "/ai-power", icon: Server, label: "AI算力" },

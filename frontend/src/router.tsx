@@ -40,6 +40,9 @@ const SolidBattery = lazy(() =>
 const WarRoom = lazy(() =>
   import("@/pages/WarRoom").then((m) => ({ default: m.WarRoom })),
 );
+const StockAnalysis = lazy(() =>
+  import("@/pages/StockAnalysis").then((m) => ({ default: m.StockAnalysis })),
+);
 
 function PageLoader() {
   return (
@@ -66,6 +69,7 @@ export const router = createBrowserRouter([
       { path: "/ai-power", element: wrap(AIPower) },
       { path: "/solid-battery", element: wrap(SolidBattery) },
       { path: "/war-room", element: wrap(WarRoom) },
+      { path: "/stock-analysis", element: wrap(StockAnalysis) },
       { path: "/", element: wrap(Home) },
       { path: "/agent", element: wrap(Agent) },
       { path: "/runtime", element: wrap(Runtime) },
