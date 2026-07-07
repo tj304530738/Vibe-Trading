@@ -40,10 +40,14 @@ export default async (req, context) => {
     } else if (path.startsWith('/reports')) {
       targetUrl = 'https://reportapi.eastmoney.com/report/list' + url.search;
       extraHeaders = { Referer: 'https://data.eastmoney.com/' };
+    } else if (path.startsWith('/news')) {
+      const newsPath = path.replace('/news', '');
+      targetUrl = 'https://newsapi.eastmoney.com/kuaixun/v1' + newsPath + url.search;
+      extraHeaders = { Referer: 'https://finance.eastmoney.com/' };
     } else {
       return json({
         error: 'Not found',
-        hint: 'Use /api/tencent, /api/sina, /api/sectors, /api/dragon, or /api/reports',
+        hint: 'Use /api/tencent, /api/sina, /api/sectors, /api/dragon, /api/reports, or /api/news',
         path,
         rawPath,
       }, 404);

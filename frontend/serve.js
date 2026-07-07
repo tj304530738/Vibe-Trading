@@ -38,6 +38,11 @@ const PROXY_RULES = [
     match: "/api/reports",
     target: "https://reportapi.eastmoney.com/report/list",
   },
+  {
+    match: "/api/news",
+    target: "https://newsapi.eastmoney.com/kuaixun/v1",
+    extraHeaders: { Referer: "https://finance.eastmoney.com" },
+  },
 ];
 
 // MIME 类型

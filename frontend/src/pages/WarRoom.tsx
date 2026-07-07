@@ -77,26 +77,6 @@ interface USMarketOverview {
   aShareMapping: Array<{ usSector: string; cnSector: string; relevance: string }>;
 }
 
-interface TodayCatalyst {
-  events: Array<{
-    eventName: string;
-    time: string;
-    affectSector: string;
-    impactIntensity: "高" | "中" | "低";
-    description: string;
-  }>;
-}
-
-interface MorningReport {
-  reports: Array<{
-    title: string;
-    coreConclusion: string;
-    industry: string;
-    ratingChange: string;
-    targetAdjustment: string;
-  }>;
-}
-
 // ══════════════════════════════════════════════════════════════
 // Constants
 // ══════════════════════════════════════════════════════════════
@@ -361,6 +341,21 @@ async function fetchReports(): Promise<ReportItem[]> {
   }));
 }
 
+async function fetchLiveNews(): Promise<{title: string; time: string; digest: string; url: string}[]> {
+  const url = `/api/news/getlist_102_ajaxResult_8_1_.html`;
+  const resp = await fetch(url);
+  const text = await resp.text();
+  const jsonStr = text.replace(/^var\s+ajaxResult=/, '').trim();
+  const data = JSON.parse(jsonStr);
+  const list = data.LivesList || [];
+  return list.slice(0, 8).map((item: Record<string, unknown>) => ({
+    title: String(item.title || item.news_title || ''),
+    time: String(item.showtime || item.publish_time || '').slice(11, 16),
+    digest: String(item.digest || item.content || '').slice(0, 60),
+    url: String(item.url_w || item.url_unique || ''),
+  }));
+}
+
 async function fetchUSMovers(): Promise<USMoverItem[]> {
   const q = US_MOVER_CODES.map(c => `gb_${c.toLowerCase()}`).join(",");
   const url = API_PROXY
@@ -499,63 +494,33 @@ function PreMarketPanel() {
     ]
   });
 
-  const [todayCatalyst] = useState<TodayCatalyst>({
-    events: [
-      {
-        eventName: "国家统计局公布PMI数据",
-        time: "09:30",
-        affectSector: "全市场",
-        impactIntensity: "高",
-        description: "制造业采购经理指数，反映经济景气度"
-      },
-      {
-        eventName: "工信部电子信息制造业座谈会",
-        time: "14:00",
-        affectSector: "半导体、消费电子",
-        impactIntensity: "中",
-        description: "讨论产业链供应链稳定"
-      },
-      {
-        eventName: "新股申购：XX科技(688XXX)",
-        time: "全天",
-        affectSector: "新股",
-        impactIntensity: "低",
-        description: "科创板新股申购"
-      }
-    ]
-  });
+  const [liveNews, setLiveNews] = useState<{title: string; time: string; digest: string; url: string}[]>([]);
+  const [loadingNews, setLoadingNews] = useState(true);
+  const [newsErr, setNewsErr] = useState("");
 
-  const [morningReports] = useState<MorningReport>({
-    reports: [
-      {
-        title: "AI算力产业链深度：从GPU到光模块的全链条机会",
-        coreConclusion: "上调行业评级至超配，建议关注光模块、AI服务器、算力芯片",
-        industry: "通信设备",
-        ratingChange: "中性→超配",
-        targetAdjustment: "平均上调15%"
-      },
-      {
-        title: "半导体设备国产化加速：刻蚀/CVD双轮驱动",
-        coreConclusion: "首次覆盖北方华创、中微公司，目标价分别上调20%",
-        industry: "半导体设备",
-        ratingChange: "首次覆盖",
-        targetAdjustment: "目标价上调20%"
-      },
-      {
-        title: "新能源车产业链2026年投资策略：智能化+出海双主线",
-        coreConclusion: "维持行业标配，建议关注智能驾驶、海外产能布局标的",
-        industry: "新能源车",
-        ratingChange: "标配维持",
-        targetAdjustment: "个别标的调整"
-      }
-    ]
-  });
+  const [morningReports, setMorningReports] = useState<ReportItem[]>([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [reportErr, setReportErr] = useState("");
 
   useEffect(() => {
     fetchUSMovers()
       .then(setUsMovers)
       .catch(() => setUsErr("美股数据加载失败"))
       .finally(() => setLoadingUS(false));
+  }, []);
+
+  useEffect(() => {
+    fetchLiveNews()
+      .then(setLiveNews)
+      .catch(() => setNewsErr("快讯加载失败"))
+      .finally(() => setLoadingNews(false));
+  }, []);
+
+  useEffect(() => {
+    fetchReports()
+      .then(setMorningReports)
+      .catch(() => setReportErr("研报加载失败"))
+      .finally(() => setLoadingReports(false));
   }, []);
 
   return (
@@ -673,72 +638,79 @@ function PreMarketPanel() {
       <div className="rounded-lg border bg-card/50 p-4 space-y-3">
         <h4 className="text-sm font-semibold flex items-center gap-2">
           <Zap className="h-4 w-4 text-amber-500" />
-          【今日催化】24H内重大事件与政策
+          【实时催化】7x24 财经快讯
         </h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 px-2 font-medium">事件名称</th>
-                <th className="text-left py-2 px-2 font-medium">时间</th>
-                <th className="text-left py-2 px-2 font-medium">影响板块</th>
-                <th className="text-left py-2 px-2 font-medium">影响强度</th>
-              </tr>
-            </thead>
-            <tbody>
-              {todayCatalyst.events.map((event, i) => (
-                <tr key={i} className="border-b border-muted/50 hover:bg-muted/20">
-                  <td className="py-2 px-2 font-medium">{event.eventName}</td>
-                  <td className="py-2 px-2 text-muted-foreground">{event.time}</td>
-                  <td className="py-2 px-2">{event.affectSector}</td>
-                  <td className="py-2 px-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      event.impactIntensity === "高" ? "bg-red-500/10 text-red-500" :
-                      event.impactIntensity === "中" ? "bg-amber-500/10 text-amber-600" :
-                      "bg-green-500/10 text-green-600"
-                    }`}>
-                      {event.impactIntensity}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-2">
+          {loadingNews ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-10 rounded bg-muted/30 animate-pulse" />
+            ))
+          ) : newsErr ? (
+            <div className="text-xs text-rose-500 py-2">{newsErr}</div>
+          ) : liveNews.length === 0 ? (
+            <div className="text-xs text-muted-foreground py-2">暂无数据</div>
+          ) : (
+            liveNews.map((item, i) => (
+              <a
+                key={i}
+                href={item.url || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border p-2.5 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-[10px] text-amber-600 font-medium shrink-0 mt-0.5">{item.time}</span>
+                  <div className="text-xs font-medium leading-tight">{item.title}</div>
+                </div>
+                {item.digest && <div className="text-[10px] text-muted-foreground mt-1 ml-0 line-clamp-2">{item.digest}</div>}
+              </a>
+            ))
+          )}
         </div>
-        <p className="text-[10px] text-muted-foreground/60">💡 数据来源：国务院官网、发改委/工信部网站、财联社（实时更新中）</p>
+        <p className="text-[10px] text-muted-foreground/60">💡 数据来源：东方财富 7x24 财经快讯（实时更新）</p>
       </div>
 
       {/* Module 4: 【研报风向】 */}
       <div className="rounded-lg border bg-card/50 p-4 space-y-3">
         <h4 className="text-sm font-semibold flex items-center gap-2">
           <FileText className="h-4 w-4 text-blue-500" />
-          【研报风向】凌晨-早间最新研报
+          【研报风向】最新行业研报（近7日）
         </h4>
         <div className="space-y-2">
-          {morningReports.reports.map((report, i) => (
-            <div key={i} className="rounded-lg border p-3 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate">{report.title}</div>
-                  <div className="text-[10px] text-muted-foreground mt-1">{report.industry} · {report.coreConclusion}</div>
+          {loadingReports ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-16 rounded-lg bg-muted/30 animate-pulse" />
+            ))
+          ) : reportErr ? (
+            <div className="text-xs text-rose-500 py-2">{reportErr}</div>
+          ) : morningReports.length === 0 ? (
+            <div className="text-xs text-muted-foreground py-2">暂无数据</div>
+          ) : (
+            morningReports.slice(0, 6).map((r, i) => (
+              <a
+                key={i}
+                href={`https://data.eastmoney.com/report/info/${r.infoCode}.html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+              >
+                <div className="text-xs font-semibold line-clamp-2">{r.title}</div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[10px] text-muted-foreground">{r.orgSName || r.orgName}</span>
+                  <div className="flex items-center gap-2">
+                    {r.industryName && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                        {r.industryName}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">{r.publishDate}</span>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  {report.ratingChange !== "无" && (
-                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-medium">
-                      {report.ratingChange}
-                    </span>
-                  )}
-                  {report.targetAdjustment !== "无" && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 text-[10px] font-medium">
-                      {report.targetAdjustment}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+              </a>
+            ))
+          )}
         </div>
-        <p className="text-[10px] text-muted-foreground/60">💡 数据来源：Wind、东方财富研报中心（实时更新中）</p>
+        <p className="text-[10px] text-muted-foreground/60">💡 数据来源：东方财富研报中心（实时更新）</p>
       </div>
 
       {/* 早报信息 */}
