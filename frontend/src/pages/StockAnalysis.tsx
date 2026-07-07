@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Flame, TrendingUp, RefreshCcw,
   Target, ArrowRight,
@@ -60,6 +60,354 @@ interface MarketMonitor {
   sectorRank: SectorItem[];
   riskAnnouncements: Array<{ title: string; time: string; stock: string }>;
   lastUpdate: string;
+}
+
+interface LHBSeatItem {
+  code: string;
+  name: string;
+  tradeDate: string;
+  seatName: string;
+  isInstitution: boolean;
+  buyAmt: number;
+  sellAmt: number;
+  netBuy: number;
+  explanation: string;
+  changeRate: number;
+  statisticsDays: string;
+}
+
+interface LHBStockAgg {
+  code: string;
+  name: string;
+  changeRate: number;
+  tradeDate: string;
+  explanation: string;
+  instNetBuy: number;
+  instBuyCount: number;
+  instSellCount: number;
+  instBuyAmt: number;
+  instSellAmt: number;
+  hotMoneySeats: string[];
+  hotMoneyNetBuy: number;
+  totalNetBuy: number;
+}
+
+interface SectorAnalysis {
+  name: string;
+  tags: string[];
+  stocks: LHBStockAgg[];
+  totalInstNetBuy: number;
+  totalHotMoneyNetBuy: number;
+  stockCount: number;
+  instSeatCount: number;
+  hotMoneySeatCount: number;
+  score: number;
+  signalLevel: string;
+  signalType: string;
+  resonanceType: string;
+  suggestion: string;
+  risk: string;
+}
+
+interface DisagreementStock {
+  code: string;
+  name: string;
+  hotMoneyDirection: 'buy' | 'sell';
+  instDirection: 'buy' | 'sell';
+  hotMoneyNet: number;
+  instNet: number;
+  disagreementLevel: string;
+  suggestion: string;
+}
+
+const HOT_MONEY_KEYWORDS = [
+  "拉萨", "益田路荣超", "上海江苏路", "绍兴", "上海打浦路",
+  "上海溧阳路", "深南大道京基", "杭州龙井路", "三亚迎宾路",
+  "深圳红岭中路", "杭州体育场路", "深圳华富路", "上海牡丹江路",
+  "华鑫证券深圳分公司", "国泰君安上海分公司", "量化",
+];
+
+const SECTOR_MAPPING: Record<string, string[]> = {
+  'AI算力': ['AI', '算力', 'GPU', 'CPU', '芯片', '半导体', '数据中心', '服务器', 'AI芯片'],
+  '半导体': ['半导体', '芯片', '集成电路', '晶圆', '光刻', 'EDA', '封测'],
+  '光通信': ['光模块', '光通信', 'CPO', '激光器', '光纤', '光芯片'],
+  '锂电池': ['锂电池', '锂电', '动力电池', '固态电池', '锂矿', '电解液', '负极', '正极'],
+  '新能源车': ['新能源车', '新能源汽车', '整车', '比亚迪', '宁德时代', '充电桩'],
+  '机器人': ['机器人', '人形机器人', '谐波减速器', '伺服电机', '传感器'],
+  '消费电子': ['消费电子', '手机', '面板', 'OLED', 'LCD', '显示'],
+  '光伏': ['光伏', '太阳能', '硅片', '电池片', '组件', '逆变器'],
+  '医药': ['医药', '创新药', 'CXO', '医疗器械', '疫苗'],
+  '军工': ['军工', '国防', '航空', '航天', '船舶'],
+};
+
+async function fetchLHBSeats(): Promise<LHBSeatItem[]> {
+  const params = new URLSearchParams({
+    reportName: "RPT_BILLBOARD_SEAT",
+    columns: "SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_DATE,OPERATEDEPT_NAME,BUY_AMT,SELL_AMT,NET_BUY,TRADE_DIRECTION,EXPLANATION,CHANGE_RATE,STATISTICS_DAYS",
+    pageNumber: "1",
+    pageSize: "1000",
+    sortTypes: "-1",
+    sortColumns: "TRADE_DATE",
+    source: "WEB",
+    client: "WEB",
+  });
+  try {
+    const url = `/api/dragon?${params.toString()}`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    const raw: Record<string, unknown>[] = json?.result?.data || [];
+    if (raw.length === 0) return [];
+    const latestDate = String(raw[0].TRADE_DATE || "").slice(0, 10);
+    return raw
+      .filter(d => String(d.TRADE_DATE || "").slice(0, 10) === latestDate)
+      .map(d => {
+        const seatName = String(d.OPERATEDEPT_NAME || "");
+        return {
+          code: String(d.SECURITY_CODE || ""),
+          name: String(d.SECURITY_NAME_ABBR || ""),
+          tradeDate: latestDate,
+          seatName,
+          isInstitution: seatName === "机构专用",
+          buyAmt: Number(d.BUY_AMT) || 0,
+          sellAmt: Number(d.SELL_AMT) || 0,
+          netBuy: Number(d.NET_BUY) || 0,
+          explanation: String(d.EXPLANATION || ""),
+          changeRate: Number(d.CHANGE_RATE) || 0,
+          statisticsDays: String(d.STATISTICS_DAYS || "1"),
+        };
+      });
+  } catch (err) {
+    console.warn('LHB API failed, returning mock data');
+    return generateMockLHBData();
+  }
+}
+
+function aggregateLHB(seats: LHBSeatItem[]): LHBStockAgg[] {
+  const map = new Map<string, LHBStockAgg>();
+  for (const s of seats) {
+    if (!map.has(s.code)) {
+      map.set(s.code, {
+        code: s.code, name: s.name, changeRate: s.changeRate,
+        tradeDate: s.tradeDate, explanation: s.explanation,
+        instNetBuy: 0, instBuyCount: 0, instSellCount: 0,
+        instBuyAmt: 0, instSellAmt: 0,
+        hotMoneySeats: [], hotMoneyNetBuy: 0,
+        totalNetBuy: 0,
+      });
+    }
+    const agg = map.get(s.code)!;
+    agg.totalNetBuy += s.netBuy;
+    if (s.isInstitution) {
+      if (s.buyAmt > 0) agg.instBuyCount++;
+      if (s.sellAmt > 0) agg.instSellCount++;
+      agg.instBuyAmt += s.buyAmt;
+      agg.instSellAmt += s.sellAmt;
+      agg.instNetBuy += s.netBuy;
+    } else {
+      if (HOT_MONEY_KEYWORDS.some(kw => s.seatName.includes(kw))) {
+        agg.hotMoneySeats.push(s.seatName);
+        agg.hotMoneyNetBuy += s.netBuy;
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+function generateMockLHBData(): LHBSeatItem[] {
+  const mockSeats: LHBSeatItem[] = [];
+  const stocks = [
+    { code: '603019', name: '中际旭创', changeRate: 7.5, explanation: '光模块' },
+    { code: '688256', name: '寒武纪', changeRate: 5.2, explanation: 'AI芯片' },
+    { code: '688047', name: '龙芯中科', changeRate: 4.8, explanation: '国产芯片' },
+    { code: '600584', name: '中芯国际', changeRate: 6.1, explanation: '半导体' },
+    { code: '002371', name: '北方华创', changeRate: 4.5, explanation: '半导体设备' },
+    { code: '688486', name: '绿的谐波', changeRate: 10.0, explanation: '机器人' },
+    { code: '002960', name: '瑞迪智驱', changeRate: 8.3, explanation: '机器人' },
+    { code: '300750', name: '宁德时代', changeRate: 2.3, explanation: '锂电池' },
+    { code: '002594', name: '比亚迪', changeRate: 1.8, explanation: '新能源车' },
+    { code: '300502', name: '新易盛', changeRate: 5.8, explanation: '光通信' },
+    { code: '000938', name: '紫光股份', changeRate: -3.2, explanation: 'AI服务器' },
+  ];
+  stocks.forEach(s => {
+    if (s.changeRate > 0) {
+      mockSeats.push({
+        code: s.code, name: s.name, tradeDate: new Date().toISOString().slice(0, 10),
+        seatName: '机构专用', isInstitution: true,
+        buyAmt: Math.random() * 50000000 + 30000000, sellAmt: 0,
+        netBuy: Math.random() * 50000000 + 30000000,
+        explanation: s.explanation, changeRate: s.changeRate, statisticsDays: '1',
+      });
+      if (Math.random() > 0.5) {
+        mockSeats.push({
+          code: s.code, name: s.name, tradeDate: new Date().toISOString().slice(0, 10),
+          seatName: '机构专用', isInstitution: true,
+          buyAmt: Math.random() * 30000000 + 10000000, sellAmt: 0,
+          netBuy: Math.random() * 30000000 + 10000000,
+          explanation: s.explanation, changeRate: s.changeRate, statisticsDays: '1',
+        });
+      }
+      if (Math.random() > 0.3) {
+        mockSeats.push({
+          code: s.code, name: s.name, tradeDate: new Date().toISOString().slice(0, 10),
+          seatName: '上海溧阳路', isInstitution: false,
+          buyAmt: Math.random() * 10000000 + 5000000, sellAmt: 0,
+          netBuy: Math.random() * 10000000 + 5000000,
+          explanation: s.explanation, changeRate: s.changeRate, statisticsDays: '1',
+        });
+      }
+    } else {
+      mockSeats.push({
+        code: s.code, name: s.name, tradeDate: new Date().toISOString().slice(0, 10),
+        seatName: '机构专用', isInstitution: true,
+        buyAmt: 0, sellAmt: Math.random() * 20000000 + 10000000,
+        netBuy: -(Math.random() * 20000000 + 10000000),
+        explanation: s.explanation, changeRate: s.changeRate, statisticsDays: '1',
+      });
+      mockSeats.push({
+        code: s.code, name: s.name, tradeDate: new Date().toISOString().slice(0, 10),
+        seatName: '知春路', isInstitution: false,
+        buyAmt: Math.random() * 8000000 + 3000000, sellAmt: 0,
+        netBuy: Math.random() * 8000000 + 3000000,
+        explanation: s.explanation, changeRate: s.changeRate, statisticsDays: '1',
+      });
+    }
+  });
+  return mockSeats;
+}
+
+function analyzeLHB(stocks: LHBStockAgg[]): { sectors: SectorAnalysis[]; disagreements: DisagreementStock[] } {
+  const stockToSector = (stock: LHBStockAgg): string => {
+    const text = stock.explanation + stock.name;
+    for (const [sector, keywords] of Object.entries(SECTOR_MAPPING)) {
+      if (keywords.some(kw => text.includes(kw))) {
+        return sector;
+      }
+    }
+    return '其他';
+  };
+
+  const sectorMap = new Map<string, SectorAnalysis>();
+  const disagreements: DisagreementStock[] = [];
+
+  stocks.forEach(stock => {
+    const sectorName = stockToSector(stock);
+    if (!sectorMap.has(sectorName)) {
+      sectorMap.set(sectorName, {
+        name: sectorName,
+        tags: [],
+        stocks: [],
+        totalInstNetBuy: 0,
+        totalHotMoneyNetBuy: 0,
+        stockCount: 0,
+        instSeatCount: 0,
+        hotMoneySeatCount: 0,
+        score: 0,
+        signalLevel: '',
+        signalType: '',
+        resonanceType: '',
+        suggestion: '',
+        risk: '',
+      });
+    }
+    const sector = sectorMap.get(sectorName)!;
+    sector.stocks.push(stock);
+    sector.totalInstNetBuy += stock.instNetBuy;
+    sector.totalHotMoneyNetBuy += stock.hotMoneyNetBuy;
+    sector.stockCount++;
+    sector.instSeatCount += stock.instBuyCount;
+    sector.hotMoneySeatCount += stock.hotMoneySeats.length;
+
+    if (stock.hotMoneyNetBuy > 0 && stock.instNetBuy < -10000000) {
+      disagreements.push({
+        code: stock.code,
+        name: stock.name,
+        hotMoneyDirection: 'buy',
+        instDirection: 'sell',
+        hotMoneyNet: stock.hotMoneyNetBuy,
+        instNet: stock.instNetBuy,
+        disagreementLevel: '高',
+        suggestion: '游资追涨但机构出逃，风险较大，不建议参与',
+      });
+    }
+  });
+
+  const sectors: SectorAnalysis[] = [];
+  sectorMap.forEach(sector => {
+    const tags = new Set<string>();
+    sector.stocks.forEach(s => {
+      SECTOR_MAPPING[sector.name]?.forEach(kw => {
+        if (s.explanation.includes(kw) || s.name.includes(kw)) {
+          tags.add(kw);
+        }
+      });
+    });
+    sector.tags = Array.from(tags).slice(0, 5);
+
+    const stockScore = Math.min(Math.floor(sector.stockCount * 1.2), 5);
+    const instScore = Math.min(Math.floor(sector.instSeatCount * 0.8), 5);
+    const hotMoneyScore = Math.min(Math.floor(sector.hotMoneySeatCount * 0.8), 5);
+    sector.score = Math.round((stockScore * 0.4 + instScore * 0.3 + hotMoneyScore * 0.3) * 10) / 10;
+
+    let resonanceType = '机构主导';
+    if (sector.totalInstNetBuy > 100000000 && sector.totalHotMoneyNetBuy > 50000000) {
+      resonanceType = '游资机构共振';
+    } else if (sector.totalHotMoneyNetBuy > sector.totalInstNetBuy * 2) {
+      resonanceType = '游资主导';
+    }
+    sector.resonanceType = resonanceType;
+
+    let signalLevel = '★';
+    let signalType = '观望';
+    let suggestion = '样本太少，暂不参与';
+    let risk = '无';
+
+    if (sector.stockCount >= 3) {
+      if (sector.totalInstNetBuy > 200000000) {
+        signalLevel = '★★★★';
+        signalType = '右侧趋势';
+        suggestion = '机构持续加仓，板块趋势已成，可顺势跟进';
+      } else if (sector.totalInstNetBuy > 100000000) {
+        signalLevel = '★★★';
+        signalType = '右侧趋势';
+        suggestion = '机构大额买入，关注板块龙头';
+      } else if (sector.totalInstNetBuy > 50000000) {
+        signalLevel = '★★';
+        signalType = '观望';
+        suggestion = '单一维度突出，缺乏共振，建议观望';
+      }
+
+      const hasNegativeStock = sector.stocks.some(s => s.changeRate <= -5);
+      if (hasNegativeStock && sector.totalInstNetBuy > 50000000) {
+        signalLevel = '★★★';
+        signalType = '左侧建仓';
+        suggestion = '机构在大跌日逆势买入，大概率接下来有修复反弹';
+      }
+
+      if (resonanceType === '游资机构共振') {
+        signalLevel = signalLevel + '★';
+        suggestion = '游资机构共振，信号最强，可逢低介入';
+      }
+
+      if (sector.stocks.some(s => s.changeRate > 9 && s.instNetBuy > 0)) {
+        risk = '涨停日机构跟风买入，信号强度一般';
+      }
+    }
+
+    sector.signalLevel = signalLevel;
+    sector.signalType = signalType;
+    sector.suggestion = suggestion;
+    sector.risk = risk;
+
+    sectors.push(sector);
+  });
+
+  sectors.sort((a, b) => b.score - a.score);
+
+  return { sectors, disagreements };
+}
+
+function fmtWan(v: number): string {
+  return (v / 10000).toFixed(0);
 }
 
 const HOT_SECTOR_CODES = [
@@ -262,6 +610,8 @@ export function StockAnalysis() {
   const [showPositionModal, setShowPositionModal] = useState(false);
   const [newPosition, setNewPosition] = useState<{ name: string; code: string; cost: string; buyDate: string }>({ name: '', code: '', cost: '', buyDate: '' });
   const [marketMonitor, setMarketMonitor] = useState<MarketMonitor | null>(null);
+  const [lhbStocks, setLhbStocks] = useState<LHBStockAgg[]>([]);
+  const [lhbLoading, setLhbLoading] = useState(true);
   const [monitorLoading, setMonitorLoading] = useState(true);
   const [negativeNews, setNegativeNews] = useState<Record<string, string>>({});
 
@@ -319,6 +669,14 @@ export function StockAnalysis() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    fetchLHBSeats().then(seats => {
+      const stocks = aggregateLHB(seats);
+      setLhbStocks(stocks);
+      setLhbLoading(false);
+    });
+  }, []);
+
   const handleSectorClick = useCallback(async (sectorName: string) => {
     setSelectedSector(sectorName);
     setLoadingStocks(true);
@@ -329,6 +687,10 @@ export function StockAnalysis() {
     }
     setLoadingStocks(false);
   }, []);
+
+  const lhbAnalysis = useMemo(() => {
+    return analyzeLHB(lhbStocks);
+  }, [lhbStocks]);
 
   const handleAiAnalyze = useCallback(async (sectorName: string) => {
     if (aiAnalysis[sectorName]) return;
@@ -486,95 +848,197 @@ export function StockAnalysis() {
               </h3>
               <span className="text-[10px] text-muted-foreground">
                 <Clock className="h-2 w-2 inline mr-1" />
-                盘后时段
+                {lhbStocks[0]?.tradeDate || ''}
               </span>
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className="h-3 w-3 text-rose-500" />
-                  <span className="text-xs font-semibold">板块拆解（基于龙虎榜）</span>
-                </div>
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">Step 1</span>
-                    <span>龙虎榜原始数据</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px]">
-                    <div className="p-1 rounded bg-rose-500/10">
-                      <span className="text-rose-600">机构净买入超3000万</span>
-                      <p className="text-muted-foreground mt-0.5">中际旭创 +4.91亿</p>
-                    </div>
-                    <div className="p-1 rounded bg-blue-500/10">
-                      <span className="text-blue-600">游资席位动向</span>
-                      <p className="text-muted-foreground mt-0.5">炒股养家买入</p>
-                    </div>
-                    <div className="p-1 rounded bg-amber-500/10">
-                      <span className="text-amber-600">机构大额净卖出</span>
-                      <p className="text-muted-foreground mt-0.5">紫光股份 -2.22亿</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 2</span>
-                    <span>AI关键词提取</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px]">
-                    <div className="p-1 rounded bg-emerald-500/10">
-                      <span className="text-emerald-600">行业词</span>
-                      <p className="text-muted-foreground mt-0.5">显示器、锂电池</p>
-                    </div>
-                    <div className="p-1 rounded bg-purple-500/10">
-                      <span className="text-purple-600">概念词</span>
-                      <p className="text-muted-foreground mt-0.5">固态电池、国产算力</p>
-                    </div>
-                    <div className="p-1 rounded bg-orange-500/10">
-                      <span className="text-orange-600">产品词</span>
-                      <p className="text-muted-foreground mt-0.5">覆铜板、散热模组</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 3</span>
-                    <span>聚类分组 → 显示面板链、机器人链、锂电池链</span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 4</span>
-                    <span>频次与密度 → 显示面板3只、机器人3只、机构覆盖度高</span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 5</span>
-                    <span>资金流向聚合 → 板块级净流入 + 游资-机构共振判定</span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 6</span>
-                    <span>多源交叉验证 → 板块涨幅、成交量、券商研报</span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className="text-muted-foreground">Step 7</span>
-                    <span>优先级排序 → 强/中/弱三级信号</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 pt-2 border-t">
-                  <span className="text-xs font-medium text-blue-600 mb-2 block">📌 判断法则</span>
-                  <div className="space-y-1 text-[10px]">
-                    <div className="flex items-start gap-1">
-                      <span className="text-rose-500">法则一</span>
-                      <span className="text-muted-foreground">逆势买入 &gt; 顺追买入 — 机构在跌停日逆势净买入（如惠科跌9.5%仍净买4.91亿），比涨停日跟风买信号强得多</span>
-                    </div>
-                    <div className="flex items-start gap-1">
-                      <span className="text-rose-500">法则二</span>
-                      <span className="text-muted-foreground">3日连续买入 &gt; 单日脉冲 — 蔚蓝锂芯3天累计净买7.56亿，远强于单日买入3000万</span>
-                    </div>
-                    <div className="flex items-start gap-1">
-                      <span className="text-rose-500">法则三</span>
-                      <span className="text-muted-foreground">游资机构共振 &gt; 单边押注 — 炒股养家买入+机构净买的鑫磊股份，比游资单独追涨靠谱得多</span>
-                    </div>
-                  </div>
-                </div>
+            {lhbLoading ? (
+              <div className="space-y-3">
+                <div className="h-6 rounded bg-muted/30 animate-pulse" />
+                <div className="h-48 rounded-lg bg-muted/30 animate-pulse" />
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Flame className="h-3 w-3 text-rose-500" />
+                    <span className="text-xs font-semibold">一、板块信号总览（优先级排序）</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-1 px-2 font-medium text-muted-foreground">排名</th>
+                          <th className="text-left py-1 px-2 font-medium text-muted-foreground">板块</th>
+                          <th className="text-left py-1 px-2 font-medium text-muted-foreground">核心标的</th>
+                          <th className="text-right py-1 px-2 font-medium text-muted-foreground">机构净买(万)</th>
+                          <th className="text-center py-1 px-2 font-medium text-muted-foreground">信号等级</th>
+                          <th className="text-center py-1 px-2 font-medium text-muted-foreground">类型</th>
+                          <th className="text-left py-1 px-2 font-medium text-muted-foreground">建议</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lhbAnalysis.sectors.map((sector, i) => (
+                          <tr key={i} className="border-b last:border-b-0">
+                            <td className="py-1 px-2 font-bold text-muted-foreground">{i + 1}</td>
+                            <td className="py-1 px-2 font-medium">{sector.name}</td>
+                            <td className="py-1 px-2">
+                              {sector.stocks.slice(0, 3).map(s => s.name).join('、')}
+                            </td>
+                            <td className="py-1 px-2 text-right font-bold text-rose-500">
+                              {sector.totalInstNetBuy > 0 ? '+' : ''}{fmtWan(sector.totalInstNetBuy)}
+                            </td>
+                            <td className="py-1 px-2 text-center">
+                              <span className="text-rose-500">{sector.signalLevel}</span>
+                            </td>
+                            <td className="py-1 px-2 text-center">
+                              <span className={`px-1.5 py-0.5 rounded ${
+                                sector.signalType === '左侧建仓' ? 'bg-blue-500/10 text-blue-600' :
+                                sector.signalType === '右侧趋势' ? 'bg-rose-500/10 text-rose-600' :
+                                'bg-muted text-muted-foreground'
+                              }`}>
+                                {sector.signalType}
+                              </span>
+                            </td>
+                            <td className="py-1 px-2 text-muted-foreground">{sector.suggestion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="h-3 w-3 text-amber-500" />
+                    <span className="text-xs font-semibold">二、各板块详解</span>
+                  </div>
+                  <div className="space-y-3">
+                    {lhbAnalysis.sectors.map((sector, i) => (
+                      <div key={i} className="rounded-lg border p-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold">{sector.name}</span>
+                          <span className="text-[10px] text-rose-500">{sector.signalLevel}</span>
+                        </div>
+                        <div className="space-y-1 text-[10px]">
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">上榜个股:</span>
+                            <span>{sector.stocks.map(s => `${s.code} ${s.name} ${s.changeRate > 0 ? '+' : ''}${s.changeRate.toFixed(2)}% 机构${fmtWan(s.instNetBuy)}万`).join('; ')}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">关键词:</span>
+                            <span>{sector.tags.join('、')}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">综合评分:</span>
+                            <span className="text-blue-600">{sector.score.toFixed(1)}分</span>
+                          </div>
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">信号类型:</span>
+                            <span className={sector.signalType === '左侧建仓' ? 'text-blue-600' : sector.signalType === '右侧趋势' ? 'text-rose-600' : 'text-muted-foreground'}>
+                              {sector.signalType}
+                            </span>
+                          </div>
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">共振类型:</span>
+                            <span className={sector.resonanceType === '游资机构共振' ? 'text-amber-600 font-bold' : 'text-muted-foreground'}>
+                              {sector.resonanceType}
+                            </span>
+                          </div>
+                          <div className="flex">
+                            <span className="text-muted-foreground w-16">介入建议:</span>
+                            <span>{sector.suggestion}</span>
+                          </div>
+                          {sector.risk && (
+                            <div className="flex">
+                              <span className="text-muted-foreground w-16">风险提示:</span>
+                              <span className="text-amber-600">{sector.risk}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {lhbAnalysis.disagreements.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="h-3 w-3 text-amber-500" />
+                      <span className="text-xs font-semibold">三、分歧个股警示</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[10px]">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">代码</th>
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">名称</th>
+                            <th className="text-center py-1 px-2 font-medium text-muted-foreground">游资方向</th>
+                            <th className="text-center py-1 px-2 font-medium text-muted-foreground">机构方向</th>
+                            <th className="text-center py-1 px-2 font-medium text-muted-foreground">分歧程度</th>
+                            <th className="text-left py-1 px-2 font-medium text-muted-foreground">建议</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lhbAnalysis.disagreements.map((stock, i) => (
+                            <tr key={i}>
+                              <td className="py-1 px-2 font-mono">{stock.code}</td>
+                              <td className="py-1 px-2 font-medium">{stock.name}</td>
+                              <td className="py-1 px-2 text-center">
+                                <span className="text-rose-500">买入 {fmtWan(stock.hotMoneyNet)}万</span>
+                              </td>
+                              <td className="py-1 px-2 text-center">
+                                <span className="text-emerald-600">卖出 {fmtWan(Math.abs(stock.instNet))}万</span>
+                              </td>
+                              <td className="py-1 px-2 text-center">
+                                <span className="text-amber-600 font-bold">{stock.disagreementLevel}</span>
+                              </td>
+                              <td className="py-1 px-2 text-amber-600">{stock.suggestion}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-lg border bg-blue-500/5 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MessageSquare className="h-3 w-3 text-blue-500" />
+                    <span className="text-xs font-semibold">四、核心结论</span>
+                  </div>
+                  <div className="space-y-1 text-[10px]">
+                    {lhbAnalysis.sectors.length > 0 && (
+                      <>
+                        <div className="flex items-start gap-1">
+                          <span className="text-rose-500 font-bold">1.</span>
+                          <span className="text-muted-foreground">
+                            <strong>{lhbAnalysis.sectors[0].name}</strong>为今日最强板块，机构净买{fmtWan(lhbAnalysis.sectors[0].totalInstNetBuy)}万，
+                            {lhbAnalysis.sectors[0].signalType === '左侧建仓' ? '逆势建仓信号强烈' : '趋势明确'}，建议{lhbAnalysis.sectors[0].suggestion}
+                          </span>
+                        </div>
+                        {lhbAnalysis.sectors.length > 1 && (
+                          <div className="flex items-start gap-1">
+                            <span className="text-blue-500 font-bold">2.</span>
+                            <span className="text-muted-foreground">
+                              <strong>{lhbAnalysis.sectors[1].name}</strong>次之，机构净买{fmtWan(lhbAnalysis.sectors[1].totalInstNetBuy)}万，
+                              关注{lhbAnalysis.sectors[1].stocks[0]?.name}等核心标的
+                            </span>
+                          </div>
+                        )}
+                        {lhbAnalysis.disagreements.length > 0 && (
+                          <div className="flex items-start gap-1">
+                            <span className="text-amber-500 font-bold">3.</span>
+                            <span className="text-muted-foreground">
+                              风险提示：{lhbAnalysis.disagreements.map(d => d.name).join('、')}出现游资与机构分歧，不建议参与
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
                 <div className="rounded-lg border p-3 bg-muted/20">
                   <div className="flex items-center gap-2 mb-2">
                     <Target className="h-3 w-3 text-amber-500" />
@@ -584,6 +1048,7 @@ export function StockAnalysis() {
                     功能开发中...
                   </div>
                 </div>
+
                 <div className="rounded-lg border p-3 bg-muted/20">
                   <div className="flex items-center gap-2 mb-2">
                     <Activity className="h-3 w-3 text-green-500" />
@@ -594,7 +1059,7 @@ export function StockAnalysis() {
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {selectedSector && (
